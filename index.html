@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="icon" href="./icon-192.png" type="image/png">
+  <meta name="theme-color" content="#0f172a">
+    
+
+  <title>使い捨てメモ</title>
+  <style>
+    :root { --bg:#0f172a; --fg:#e5e7eb; --muted:#94a3b8; --accent:#22c55e; }
+    *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial}
+    body{margin:0;min-height:100vh;background:linear-gradient(180deg,#0b1022,#0f172a);color:var(--fg);display:grid;place-items:center}
+    .card{width:min(720px,92vw);background:#0b1220aa;border:1px solid #1f2a44;border-radius:20px;padding:20px 18px;backdrop-filter: blur(6px);box-shadow:0 10px 30px #0005}
+    h1{margin:6px 0 10px;font-size:22px}
+    textarea{width:100%;min-height:240px;background:#0a1426;color:var(--fg);border:1px solid #233056;border-radius:12px;padding:12px;font-size:14px;resize:vertical;outline:none}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}
+    select,button{background:#0a1426;color:var(--fg);border:1px solid #233056;border-radius:10px;padding:10px 12px;font-size:14px}
+    button{cursor:pointer}
+    .ok{border-color:#1f5134}
+    .muted{color:var(--muted);font-size:12px}
+    .timer{margin-left:auto}
+    .badge{display:inline-block;border:1px solid #2c3c64;border-radius:999px;padding:4px 10px;font-size:12px;color:#cbd5e1}
+    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>使い捨てメモ <span class="badge">自動消去つき</span></h1>
+    <textarea id="memo" placeholder="ここにメモ。保存すると指定時間後に自動で消えます。"></textarea>
+    <div class="row">
+      <label>保存期限:
+        <select id="ttl">
+          <option value="5">5分</option>
+          <option value="15">15分</option>
+          <option value="60" selected>1時間</option>
+          <option value="1440">1日</option>
+        </select>
+      </label>
+      <button id="save" class="ok">保存</button>
+      <button id="clear">今すぐ消す</button>
+      <span class="timer muted" id="remaining">未保存</span>
+    </div>
+    <div class="footer">
+      <span class="muted">ローカル専用 / ネット送信なし</span>
+      <span class="muted">⌘/Ctrl+S で保存</span>
+    </div>
+  </div>
+
+  <script>
+    const KEY = "throwaway-memo-v1";
+    const $ = (id) => document.getElementById(id);
+    const memo = $("memo"), ttl = $("ttl"), remaining = $("remaining");
+
+    function load() {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      try {
+        const { text, expireAt } = JSON.parse(raw);
+        const now = Date.now();
+        if (expireAt && now > expireAt) {
+          localStorage.removeItem(KEY);
+          return;
+        }
+        memo.value = text || "";
+        tick();
+      } catch { /* ignore */ }
+    }
+
+    function save() {
+      const minutes = parseInt(ttl.value, 10);
+      const expireAt = Date.now() + minutes * 60 * 1000;
+      const data = { text: memo.value, expireAt };
+      localStorage.setItem(KEY, JSON.stringify(data));
+      tick();
+    }
+
+    function clearNow() {
+      localStorage.removeItem(KEY);
+      memo.value = "";
+      remaining.textContent = "未保存";
+    }
+
+    function fmt(ms) {
+      const s = Math.max(0, Math.floor(ms / 1000));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const ss = s % 60;
+      return h ? `${h}時間${m}分${ss}秒` : (m ? `${m}分${ss}秒` : `${ss}秒`);
+    }
+
+    function tick() {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) { remaining.textContent = "未保存"; return; }
+      try {
+        const { expireAt } = JSON.parse(raw);
+        const left = expireAt - Date.now();
+        if (left <= 0) {
+          clearNow();
+          return;
+        }
+        remaining.textContent = "残り " + fmt(left);
+      } catch { remaining.textContent = "未保存"; }
+    }
+
+    $("save").onclick = save;
+    $("clear").onclick = clearNow;
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault(); save();
+      }
+    });
+    load();
+    setInterval(tick, 1000);
+  </script>
+   <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js");
+    }
+  </script>
+</body>
+</html>
